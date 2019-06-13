@@ -28,6 +28,7 @@
           service:
             name: salt-minion
             state: started
+            
 - name: Aceitar todas as chaves de minions
   hosts: localhost
 
