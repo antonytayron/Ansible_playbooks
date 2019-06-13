@@ -1,5 +1,5 @@
 - name: Installar salt-minion
-  hosts: nodes
+  hosts: all
 
   tasks:
         - name: adicionar repositorio
@@ -16,15 +16,21 @@
           lineinfile:
             path: /etc/salt/minion
             insertafter: '^#master: '
-            line: master: 192.168.10.30
+            line: 'master: 192.168.10.30'
 
         - name: Adicionar minion ID
           lineinfile:
             path: /etc/salt/minion
-            insertafter: '^#id: '
-            line: id: {{inventory_hostname}}
+            insertafter: #id:
+            line: 'id: {{ansible_fqdn}}'
 
         - name: Iniciar salt-minion
           service:
             name: salt-minion
             state: started
+- name: Aceitar todas as chaves de minions
+  hosts: localhost
+
+  tasks:
+        - name: aceitar as chaves dos minions
+          shell: salt-key -A -y
