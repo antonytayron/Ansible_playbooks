@@ -1,4 +1,4 @@
-- name: Gera hash Name_VM
+- name: Deploy new VM
   hosts: Alberta
 
   tasks:
