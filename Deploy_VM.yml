@@ -1,0 +1,14 @@
+- name: Gera hash Name_VM
+  hosts: Alberta
+
+  tasks:
+      - name: Nome VM
+        shell: date | md5sum | cut -c 1-10
+        register: vm_name
+
+      - name: deploy VM
+        shell: xe vm-install template="CentOS 7" new-name-label={{ vm_name.stdout }}
+        register: vmuuid
+
+      - name: set VCPU
+        shell: xe vm-param-set VCPUs-at-startup=4 uuid={{ vmuuid.stdout }}
