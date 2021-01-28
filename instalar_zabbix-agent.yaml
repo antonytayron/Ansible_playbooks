@@ -17,5 +17,5 @@
           lineinfile:
             path: /etc/zabbix/zabbix_agentd.conf
             regexp: Server=127.0.0.1
-            line: Server=192.168.10.3
+            line: Server=192.168.15.3
 
