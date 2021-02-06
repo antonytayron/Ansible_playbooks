@@ -1,0 +1,45 @@
+- name: Install Docker
+  hosts: k8s
+
+  tasks:
+          - name: Update APT
+            apt:
+                    update_cache: yes
+
+          - name: Install Docker
+            shell: curl -fsSL https://get.docker.com | bash
+
+          - name: Install transport-https
+            apt:
+                    name: apt-transport-https
+                    state: latest
+
+          - name: Curl Key
+            shell: curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+
+          - name: Echo repo
+            shell: echo "deb http://apt.kubernetes.io/ kubernetes-xenial main" > /etc/apt/sources.list.d/kubernetes.list
+
+
+          - name: Update APT 2
+            apt:
+                    update_cache: yes
+
+          - name: Install kubelet
+            apt:
+                    name: kubelet
+                    state: latest
+
+          - name: Install kubeadm
+            apt:
+                    name: kubeadm
+                    state: latest
+
+          - name: Install kubectl
+            apt:
+                    name: kubectl
+                    state: latest
+
+
+          - name: Disable SWAP
+            shell: swapoff -a
