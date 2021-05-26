@@ -1,0 +1,90 @@
+- name: Destroy VM
+  hosts: local
+
+  tasks:
+
+    - include_vars: vm_details.yml
+
+    - name: Get VM details
+      community.general.xenserver_guest_info:
+        hostname: "{{ xen_server }}"
+        username: "{{ xen_user }}"
+        password: "{{ xen_password }}"
+        validate_certs: no
+        name: "{{ vm_name }}"
+      delegate_to: localhost
+      register: vm_details
+
+    - name: Build inventory of VM
+      add_host:
+        name: "{{ vm_details.instance.networks[0].ip }}"
+        groups: vm_temp_group
+        ansible_ssh_user: "{{ ansible_user }}"
+        ansible_ssh_pass: "{{ ansible_password }}"
+        ansible_become: yes
+        ansible_sudo_pass: "{{ ansible_password }}"
+
+- name:  Poweroff VM
+  hosts: vm_temp_group
+  connection: ssh
+
+  tasks:
+
+    - name: Poweroff VM
+      community.general.shutdown:
+
+    - name: Pause
+      pause:
+        minutes: 2
+
+- name: Destroy VM - 2
+  hosts: local
+
+  tasks:
+
+    - include_vars: vm_details.yml
+
+    - name: Get VM details
+      community.general.xenserver_guest_info:
+        hostname: "{{ xen_server }}"
+        username: "{{ xen_user }}"
+        password: "{{ xen_password }}"
+        validate_certs: no
+        name: "{{ vm_name }}"
+      delegate_to: localhost
+      register: vm_details
+
+    - debug:
+        msg: "{{vm_details.instance.uuid}}"
+    
+    - name: Remove a VM
+      community.general.xenserver_guest:
+        hostname: "{{ xen_server }}"
+        username: "{{ xen_user }}"
+        password: "{{ xen_password }}"
+        uuid: "{{ vm_details.instance.uuid }}"
+        state: absent
+      delegate_to: localhost
+
+    - name: Delete from Zabbix
+      local_action:
+        module: community.zabbix.zabbix_host
+        server_url: https://zabbix.midgard.com.br
+        login_user:  "{{ ansible_user }}"
+        login_password: "{{ ansible_password }}"
+        host_name: "{{ vm_name }}"
+        visible_name: "{{ vm_name }}"
+        state: absent
+
+- name: Delete DNS record
+  hosts: geffen
+
+  tasks:
+    - include_vars: vm_details.yml
+
+    - name: Delete A record
+      community.windows.win_dns_record:
+        name: "{{ vm_name }}"
+        type: "A"
+        state: absent
+        zone: "{{ dns_zone }}"

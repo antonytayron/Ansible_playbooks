@@ -1,0 +1,188 @@
+- name: deploy VM
+  hosts: local
+
+  tasks:
+
+    - include_vars: vm_details.yml
+
+    - name: Create a VM from a template
+      community.general.xenserver_guest:
+        hostname: "{{ xen_server }}"
+        username: "{{ xen_user }}"
+        password: "{{ xen_password }}"
+        validate_certs: no
+        folder: /deployvms
+        name: "{{ vm_name }}"
+        state: poweredon
+        template: MDG-Ubuntu-prd
+        disk:
+        - size_gb: "{{ vm_disk_size }}"
+          sr: Payon
+        hardware:
+          num_cpus: "{{ vm_cores }}"
+          num_cpu_cores_per_socket: 1
+          memory_mb: "{{ vm_men_size }}"
+        networks:
+        - name: VLAN_PRD
+        wait_for_ip_address: yes
+      delegate_to: localhost
+      register: vm_deploy
+
+    - name: Get VM details
+      community.general.xenserver_guest_info:
+        hostname: "{{ xen_server }}"
+        username: "{{ xen_user }}"
+        password: "{{ xen_password }}"
+        validate_certs: no
+        name: "{{ vm_name }}"
+      delegate_to: localhost
+      register: vm_details
+
+    - debug:
+        msg: "{{vm_details.instance.networks[0].ip}}"
+
+    - name: Build inventory of VM
+      add_host:
+        name: "{{ vm_details.instance.networks[0].ip }}"
+        groups: vm_temp_group
+        ansible_ssh_user: "{{ ansible_user }}"
+        ansible_ssh_pass: "{{ ansible_password }}"
+        ansible_become: yes
+        ansible_sudo_pass: "{{ ansible_password }}"
+
+    - name: Record VM IP in file
+      copy:
+        content: "vm_ip: {{ vm_details.instance.networks[0].ip | lower }}"
+        dest: "/tmp/vm_ip.yml"
+      delegate_to: localhost
+
+    - name: Pause
+      pause:
+        minutes: 2
+
+    - name: Add Vm in zabbix
+      local_action:
+        module: community.zabbix.zabbix_host
+        server_url: https://zabbix.midgard.com.br
+        login_user:  "{{ ansible_user }}"
+        login_password: "{{ ansible_password }}"
+        host_name: "{{ vm_name }}"
+        visible_name: "{{ vm_name }}"
+        host_groups:
+          - Midgard
+          - Midgard VMs
+        link_templates:
+          - Template Citrix Xenserver VMs
+          - Template Module ICMP Ping
+          - Template OS Linux
+        status: enabled
+        state: present
+        interfaces:
+        - type: 1
+          main: 1
+          useip: 1
+          ip: "{{ vm_details.instance.networks[0].ip }}"
+          dns: "{{ vm_name }}.midgard.local"
+          port: "10050"
+        macros:
+          - macro: '{$XENMASTER}'
+            value: "{{ xen_server }}"
+          - macro: '{$XENUSERNAME}'
+            value: "{{ xen_user }}"
+          - macro: '{$XENPASSWORD}'
+            value: "{{ xen_password }}"
+
+
+- name: Configure VM SO
+  hosts: vm_temp_group
+  connection: ssh
+
+  tasks:
+
+    - include_vars: vm_details.yml
+
+    - name: APT Update
+      apt:
+        update_cache: yes
+
+    - name: APT Upgrade
+      apt:
+        upgrade: dist
+
+    - name: Change a hostname
+      ansible.builtin.hostname:
+        name: "{{ vm_name | lower }}"
+
+    - name:
+      shell: "hostname"
+      register: hostname
+
+    - debug:
+        msg: "{{hostname.stdout_lines}}"
+
+    - name: Install Zabbix Agent from deb
+      apt:
+        deb: https://repo.zabbix.com/zabbix/5.4/ubuntu/pool/main/z/zabbix-release/zabbix-release_5.4-1+ubuntu20.04_all.deb
+      become: yes
+
+    - name: APT update 2
+      apt:
+        update_cache: yes
+    
+    - name: Install Zabbix-agent
+      apt:
+        name: zabbix-agent
+      become: yes
+
+    - name: Replace "Server" in zabbix_confd
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: Server=127.0.0.1
+        line: Server=192.168.10.3
+
+    - name: Replace "ServerActive" in zabbix_confd
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: ServerActive=127.0.0.1
+        line: ServerActive=192.168.10.3
+
+    - name: Replace "Hostname" in zabbix_confd
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: Hostname=Zabbix server
+        line: Hostname={{ vm_name | lower }}
+
+    - name: Stop Zabbix Agent
+      ansible.builtin.service:
+        name: zabbix-agent
+        state: stopped
+      become: yes
+
+    - name: Start Zabbix Agent
+      ansible.builtin.service:
+        name: zabbix-agent
+        state: started
+      become: yes
+
+- name: Create DNS A record
+  hosts: geffen
+
+  tasks:
+    - include_vars: vm_details.yml
+    - include_vars: /tmp/vm_ip.yml
+
+    - name: Create A record
+      community.windows.win_dns_record:
+        name: "{{ vm_name | lower }}"
+        type: "A"
+        value: "{{ vm_ip }}"
+        zone: "{{ dns_zone }}"
+
+- name: Clean
+  hosts: local
+
+  tasks:
+    - name: Remove temp VM IP in file
+      ansible.builtin.file:
+        path: "/tmp/vm_ip.yml"
+        state: absent
