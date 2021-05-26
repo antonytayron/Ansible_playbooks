@@ -1,0 +1,13 @@
+xen_server: #Xen Server Master
+xen_user: #Xen user
+xen_password: #Xen user password
+
+ansible_user: #ansible user  
+ansible_password: #ansible user password
+
+vm_name: #VM Name for deploy
+vm_disk_size: #disk size 
+vm_cores: #Number of cores
+vm_men_size: #Memory size in Mb
+
+dns_zone: #DNS zone to configure
